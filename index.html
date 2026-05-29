@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
@@ -175,6 +176,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <!-- LOGIN -->
+
 <div class="screen" id="loginScreen">
   <div class="login-card">
     <div class="login-emblem">&#128506;</div>
@@ -194,6 +196,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <!-- SOLDIER -->
+
 <div class="screen" id="soldierScreen">
   <div class="topbar">
     <div>
@@ -230,6 +233,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <!-- ADMIN -->
+
 <div class="screen" id="adminScreen">
   <div class="topbar">
     <div>
@@ -253,6 +257,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
     </div>
     <button class="new-req-toggle" style="background:var(--olive-light)" onclick="openPickSoldierModal()">+ הוספת בקשה לחייל</button>
     <button class="btn-export" onclick="exportWeekly()">&#128228; ייצוא לוז שבועי לוואטסאפ</button>
+    <button class="btn-export" style="background:#2980b9" onclick="exportRequests()">&#128203; יצוא רשימת בקשות יציאה</button>
     <div class="card">
       <div class="cal-nav">
         <button class="cal-nav-btn" onclick="calPrev()">&#8249;</button>
@@ -290,6 +295,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <!-- PICK SOLDIER MODAL -->
+
 <div class="modal-overlay" id="pickSoldierModal">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -323,6 +329,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <!-- SOLDIER MODAL -->
+
 <div class="modal-overlay" id="soldierModal">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -333,6 +340,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <!-- DAY MODAL -->
+
 <div class="modal-overlay" id="dayModal">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
@@ -342,7 +350,9 @@ textarea.form-control{resize:vertical;min-height:80px;}
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
 <script>
 firebase.initializeApp({
   apiKey:"AIzaSyCHBGGi-iqYn4lcQxMI24OwO2_-No5ykS0",
@@ -745,6 +755,39 @@ function fallbackCopy(text){
   catch(e){showToast('לא הצליח להעתיק');}
   document.body.removeChild(ta);
 }
+// EXPORT REQUESTS LIST
+window.exportRequests = function() {
+  var reqs = Object.values(allRequests).filter(function(r) {
+    return r.status === 'approved' || r.status === 'pending';
+  });
+
+  if (reqs.length === 0) { showToast('אין בקשות יציאה להצגה'); return; }
+
+  // Sort by dateOut ascending
+  reqs.sort(function(a, b) {
+    return a.dateOut < b.dateOut ? -1 : a.dateOut > b.dateOut ? 1 : 0;
+  });
+
+  var lines = ['*רשימת בקשות יציאה*', ''];
+  reqs.forEach(function(r, i) {
+    var status = r.status === 'pending' ? ' (ממתין לאישור)' : '';
+    lines.push((i+1) + '. *' + r.soldierName + '*' + status);
+    lines.push('   יציאה: ' + fmtDate(r.dateOut) + ' | חזרה: ' + fmtDate(r.dateIn));
+    lines.push('   שיירה: ' + (r.convoy || 'לא צוין'));
+    lines.push('');
+  });
+
+  var text = lines.join('
+');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      showToast('הועתק! פתח וואטסאפ והדבק');
+      setTimeout(function(){ window.open('https://wa.me/','_blank'); }, 1500);
+    }).catch(function(){ fallbackCopy(text); });
+  } else { fallbackCopy(text); }
+};
+
 </script>
+
 </body>
 </html>
