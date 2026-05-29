@@ -7,7 +7,7 @@
 <title>מערכת בקשות יציאה | מילואים</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root{--olive:#4a5c2f;--olive-dark:#2e3a1a;--olive-light:#6b7f45;--sand-light:#e8dcc8;--sand-pale:#f5efe4;--red:#c0392b;--green-ok:#27ae60;--yellow:#e67e22;--white:#fdfaf5;--text:#1a1a12;--text-muted:#6b6b55;--border:#d4c9b0;--shadow:0 4px 24px rgba(74,92,47,0.13);--radius:14px;}
+:root{--olive:#4a5c2f;--olive-dark:#2e3a1a;--olive-light:#6b7f45;--sand-light:#e8dcc8;--sand-pale:#f5efe4;--red:#c0392b;--green-ok:#27ae60;--yellow:#e67e22;--blue:#2980b9;--white:#fdfaf5;--text:#1a1a12;--text-muted:#6b6b55;--border:#d4c9b0;--shadow:0 4px 24px rgba(74,92,47,0.13);--radius:14px;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Heebo',sans-serif;background:var(--sand-pale);color:var(--text);min-height:100vh;font-size:15px;}
 .screen{display:none;min-height:100vh;}
@@ -257,7 +257,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
     </div>
     <button class="new-req-toggle" style="background:var(--olive-light)" onclick="openPickSoldierModal()">+ הוספת בקשה לחייל</button>
     <button class="btn-export" onclick="exportWeekly()">&#128228; ייצוא לוז שבועי לוואטסאפ</button>
-    <button class="btn-export" style="background:#2980b9" onclick="exportRequests()">&#128203; יצוא רשימת בקשות יציאה</button>
+    <button class="btn-export" style="background:var(--blue)" onclick="exportRequests()">&#128203; יצוא רשימת בקשות יציאה</button>
     <div class="card">
       <div class="cal-nav">
         <button class="cal-nav-btn" onclick="calPrev()">&#8249;</button>
@@ -380,13 +380,12 @@ var currentFilter = 'all';
 var allRequests = {};
 var allSoldiers = {};
 var prevPendingCount = 0;
-var convoys = {soldier:null, pick:null};
+var convoys = {soldier:null,pick:null};
 var pickTarget = null;
 var pendingDeleteId = null;
 var calYear, calMonth;
 (function(){var n=new Date();calYear=n.getFullYear();calMonth=n.getMonth();})();
 
-// TOAST
 var toastTimer;
 function showToast(msg){
   var el=document.getElementById('toast');
@@ -395,8 +394,7 @@ function showToast(msg){
   toastTimer=setTimeout(function(){el.classList.remove('show');},3000);
 }
 
-// HELPERS
-function fmtDate(d){if(!d)return '';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
+function fmtDate(d){if(!d)return'';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function dateStr(y,m,d){return y+'-'+(m+1<10?'0':'')+(m+1)+'-'+(d<10?'0':'')+d;}
 function isHomePeriod(ds){for(var i=0;i<HOME_PERIODS.length;i++){if(ds>=HOME_PERIODS[i].from&&ds<=HOME_PERIODS[i].to)return true;}return false;}
 function getStatus(ds){
@@ -411,7 +409,6 @@ function getStatus(ds){
 }
 function showScreen(id){document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});document.getElementById(id).classList.add('active');}
 
-// FIREBASE
 var sl=false,rl=false;
 function tryReveal(){
   if(!sl||!rl)return;
@@ -430,7 +427,6 @@ db.ref('requests').on('value',function(snap){
 });
 setTimeout(function(){var ov=document.getElementById('loadingOverlay');if(ov&&!ov.classList.contains('hidden')){ov.classList.add('hidden');showScreen('loginScreen');showToast('בעיית חיבור - נסה לרענן');}},8000);
 
-// AUTH
 window.login=function(){
   var name=document.getElementById('soldierNameInput').value.trim();
   var pass=document.getElementById('loginPassInput').value;
@@ -458,18 +454,16 @@ window.logout=function(){
   showScreen('loginScreen');
 };
 
-// CONVOY
 window.setConvoy=function(scope,type){
   convoys[scope]=type;
   if(scope==='soldier'){
     document.getElementById('cNoon').classList.toggle('selected',type==='noon');
     document.getElementById('cEvening').classList.toggle('selected',type==='evening');
-  } else {
+  }else{
     document.getElementById('pNoon').classList.toggle('selected',type==='noon');
     document.getElementById('pEvening').classList.toggle('selected',type==='evening');
   }
 };
-
 window.toggleForm=function(formId,iconId){
   var form=document.getElementById(formId);
   var icon=document.getElementById(iconId);
@@ -478,22 +472,20 @@ window.toggleForm=function(formId,iconId){
   icon.textContent=hidden?'-':'+';
 };
 
-// SUBMIT
 window.submitReq=function(scope){
-  var isAdmin=(scope==='admin'||scope==='pick');
-  var dateOut,dateIn,reason,convoy,soldierName,soldierId;
+  var dateOut,dateIn,reason,convoy,soldierName,soldierId,isAdmin;
   if(scope==='soldier'){
     dateOut=document.getElementById('reqDateOut').value;
     dateIn=document.getElementById('reqDateIn').value;
     reason=document.getElementById('reqReason').value.trim();
     convoy=convoys.soldier;
-    soldierName=currentUser.name;soldierId=currentUser.id;
-  } else {
+    soldierName=currentUser.name;soldierId=currentUser.id;isAdmin=false;
+  }else{
     dateOut=document.getElementById('pDateOut').value;
     dateIn=document.getElementById('pDateIn').value;
     reason=document.getElementById('pReason').value.trim();
     convoy=convoys.pick;
-    soldierName=pickTarget.name;soldierId=pickTarget.id;
+    soldierName=pickTarget.name;soldierId=pickTarget.id;isAdmin=true;
   }
   if(!dateOut||!dateIn||!reason){showToast('נא מלא את כל השדות');return;}
   if(dateIn<dateOut){showToast('תאריך חזרה חייב להיות אחרי תאריך יציאה');return;}
@@ -510,22 +502,19 @@ window.submitReq=function(scope){
     document.getElementById('soldierForm').style.display='none';
     document.getElementById('newReqIcon').textContent='+';
     showToast('הבקשה נשלחה בהצלחה!');
-  } else {
+  }else{
     closeModal('pickSoldierModal');
     showToast('הבקשה נוספה ואושרה עבור '+soldierName);
   }
 };
 
-// MY REQUESTS
 function renderMyReqs(){
   var myReqs=Object.values(allRequests).filter(function(r){return r.soldierId===currentUser.id;});
   myReqs.sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});
-  var el=document.getElementById('myRequestsList');
-  if(!el)return;
+  var el=document.getElementById('myRequestsList');if(!el)return;
   el.innerHTML=myReqs.length===0?'<div class="empty-state"><div class="empty-icon">&#128205;</div>אין בקשות עדיין</div>':myReqs.map(function(r){return buildCard(r,false);}).join('');
 }
 
-// ADMIN
 function renderAdmin(){renderStats();updateLive();renderCal();renderAllReqs();renderSoldierList();updateDot();}
 function renderStats(){
   var reqs=Object.values(allRequests);
@@ -551,7 +540,6 @@ function updateLive(){
   lEl.textContent='יום '+days[today.getDay()]+' '+String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0');
 }
 
-// CALENDAR
 var HE_M=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 var HE_D=['א','ב','ג','ד','ה','ו','ש'];
 window.calPrev=function(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCal();};
@@ -603,7 +591,6 @@ function renderAllReqs(){
   var el=document.getElementById('allRequestsList');if(!el)return;
   el.innerHTML=reqs.length===0?'<div class="empty-state"><div class="empty-icon">&#128205;</div>אין בקשות</div>':reqs.map(function(r){return buildCard(r,true);}).join('');
 }
-
 function renderSoldierList(){
   var soldiers=Object.values(allSoldiers);
   var el=document.getElementById('soldiersList');if(!el)return;
@@ -615,7 +602,6 @@ function renderSoldierList(){
     return '<div class="soldier-row"><div class="soldier-avatar">'+s.name.charAt(0)+'</div><div class="soldier-info"><div class="soldier-name">'+s.name+'</div><div class="soldier-reqs">'+myReqs.length+' בקשות | '+pending+' ממתינות</div></div>'+badge+'</div>';
   }).join('');
 }
-
 window.addSoldier=function(){
   var name=document.getElementById('newSoldierName').value.trim();
   if(!name)return;
@@ -648,7 +634,6 @@ function buildCard(r,isAdmin){
   return '<div class="req-card '+r.status+'"><div class="req-header">'+soldierHtml+'<span class="badge badge-'+r.status+'">'+labels[r.status]+'</span></div><div class="req-dates"><span>יציאה: <strong>'+fmtDate(r.dateOut)+'</strong></span><span>חזרה: <strong>'+fmtDate(r.dateIn)+'</strong></span></div><div class="req-reason">'+r.reason+'</div>'+convoyHtml+actionsHtml+'</div>';
 }
 
-// PICK SOLDIER MODAL
 window.openPickSoldierModal=function(){
   pickTarget=null;convoys.pick=null;
   document.getElementById('pickStep').style.display='block';
@@ -658,7 +643,6 @@ window.openPickSoldierModal=function(){
   document.getElementById('pDateOut').value='';
   document.getElementById('pDateIn').value='';
   document.getElementById('pReason').value='';
-
   var soldiers=Object.values(allSoldiers);
   var html=TEAM.map(function(name){
     var s=soldiers.find(function(x){return x.name===name;});
@@ -666,18 +650,15 @@ window.openPickSoldierModal=function(){
     var isMe=name===ADMIN_NAME;
     return '<div class="pick-item'+(isMe?' is-me':'')+'" onclick="pickSoldier(\''+name+'\')"><div class="pick-avatar">'+name.charAt(0)+'</div><div><div class="pick-name">'+name+(isMe?' (אני)':'')+'</div><div class="pick-sub">'+reqs+' בקשות</div></div></div>';
   }).join('');
-  // Add any extra soldiers not in TEAM
   soldiers.forEach(function(s){
     if(TEAM.indexOf(s.name)===-1){
       var reqs=Object.values(allRequests).filter(function(r){return r.soldierId===s.id;}).length;
       html+='<div class="pick-item" onclick="pickSoldier(\''+s.name+'\')"><div class="pick-avatar">'+s.name.charAt(0)+'</div><div><div class="pick-name">'+s.name+'</div><div class="pick-sub">'+reqs+' בקשות</div></div></div>';
     }
   });
-
   document.getElementById('pickList').innerHTML=html;
   document.getElementById('pickSoldierModal').classList.add('active');
 };
-
 window.pickSoldier=function(name){
   var soldiers=Object.values(allSoldiers);
   var s=soldiers.find(function(x){return x.name===name;});
@@ -687,13 +668,11 @@ window.pickSoldier=function(name){
   document.getElementById('pickStep').style.display='none';
   document.getElementById('fillStep').style.display='block';
 };
-
 window.goBack=function(){
   document.getElementById('pickStep').style.display='block';
   document.getElementById('fillStep').style.display='none';
 };
 
-// SOLDIER MODAL
 window.openSoldierModal=function(soldierId){
   var soldier=allSoldiers[soldierId];if(!soldier)return;
   var reqs=Object.values(allRequests).filter(function(r){return r.soldierId===soldierId;});
@@ -714,7 +693,6 @@ window.closeModal=function(id){document.getElementById(id).classList.remove('act
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeModal(id);});
 });
 
-// EXPORT
 window.exportWeekly=function(){
   var today=new Date();
   var sunday=new Date(today);sunday.setDate(today.getDate()-today.getDay());
@@ -743,11 +721,32 @@ window.exportWeekly=function(){
     }
     lines.push('');
   }
-  var text=lines.join('\n');
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(function(){showToast('הועתק! פתח וואטסאפ והדבק');setTimeout(function(){window.open('https://wa.me/','_blank');},1500);}).catch(function(){fallbackCopy(text);});
-  }else{fallbackCopy(text);}
+  copyAndOpen(lines.join('\n'));
 };
+
+window.exportRequests=function(){
+  var reqs=Object.values(allRequests).filter(function(r){return r.status==='approved'||r.status==='pending';});
+  if(reqs.length===0){showToast('אין בקשות יציאה להצגה');return;}
+  reqs.sort(function(a,b){return a.dateOut<b.dateOut?-1:a.dateOut>b.dateOut?1:0;});
+  var lines=['*רשימת בקשות יציאה*',''];
+  reqs.forEach(function(r,i){
+    var statusTag=r.status==='pending'?' (ממתין לאישור)':'';
+    lines.push((i+1)+'. *'+r.soldierName+'*'+statusTag);
+    lines.push('   יציאה: '+fmtDate(r.dateOut)+' | חזרה: '+fmtDate(r.dateIn));
+    lines.push('   שיירה: '+(r.convoy||'לא צוין'));
+    lines.push('');
+  });
+  copyAndOpen(lines.join('\n'));
+};
+
+function copyAndOpen(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      showToast('הועתק! פתח וואטסאפ והדבק');
+      setTimeout(function(){window.open('https://wa.me/','_blank');},1500);
+    }).catch(function(){fallbackCopy(text);});
+  }else{fallbackCopy(text);}
+}
 function fallbackCopy(text){
   var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
   document.body.appendChild(ta);ta.focus();ta.select();
@@ -755,38 +754,6 @@ function fallbackCopy(text){
   catch(e){showToast('לא הצליח להעתיק');}
   document.body.removeChild(ta);
 }
-// EXPORT REQUESTS LIST
-window.exportRequests = function() {
-  var reqs = Object.values(allRequests).filter(function(r) {
-    return r.status === 'approved' || r.status === 'pending';
-  });
-
-  if (reqs.length === 0) { showToast('אין בקשות יציאה להצגה'); return; }
-
-  // Sort by dateOut ascending
-  reqs.sort(function(a, b) {
-    return a.dateOut < b.dateOut ? -1 : a.dateOut > b.dateOut ? 1 : 0;
-  });
-
-  var lines = ['*רשימת בקשות יציאה*', ''];
-  reqs.forEach(function(r, i) {
-    var status = r.status === 'pending' ? ' (ממתין לאישור)' : '';
-    lines.push((i+1) + '. *' + r.soldierName + '*' + status);
-    lines.push('   יציאה: ' + fmtDate(r.dateOut) + ' | חזרה: ' + fmtDate(r.dateIn));
-    lines.push('   שיירה: ' + (r.convoy || 'לא צוין'));
-    lines.push('');
-  });
-
-  var text = lines.join('
-');
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(function() {
-      showToast('הועתק! פתח וואטסאפ והדבק');
-      setTimeout(function(){ window.open('https://wa.me/','_blank'); }, 1500);
-    }).catch(function(){ fallbackCopy(text); });
-  } else { fallbackCopy(text); }
-};
-
 </script>
 
 </body>
