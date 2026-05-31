@@ -54,10 +54,11 @@ textarea.form-control{resize:vertical;min-height:80px;}
 .req-reason{font-size:13px;color:var(--text);background:var(--sand-pale);padding:7px 10px;border-radius:8px;margin-bottom:8px;line-height:1.5;}
 .req-convoy{font-size:12px;font-weight:700;color:var(--olive);margin-bottom:8px;}
 .req-actions{display:flex;gap:8px;flex-wrap:wrap;}
-.btn-approve,.btn-reject,.btn-delete{flex:1;padding:8px;border:none;border-radius:8px;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:70px;}
+.btn-approve,.btn-reject,.btn-delete,.btn-edit{flex:1;padding:8px;border:none;border-radius:8px;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-width:60px;}
 .btn-approve{background:var(--green-ok);color:white;}
 .btn-reject{background:var(--red);color:white;}
 .btn-delete{background:#95a5a6;color:white;}
+.btn-edit{background:var(--blue);color:white;}
 .new-req-toggle{width:100%;padding:14px;background:var(--olive);color:white;border:none;border-radius:var(--radius);font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;box-shadow:var(--shadow);}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .btn-submit{width:100%;padding:12px;background:var(--olive);color:white;border:none;border-radius:10px;font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;}
@@ -154,6 +155,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 .pick-name{font-weight:700;font-size:14px;color:var(--text);}
 .pick-sub{font-size:11px;color:var(--text-muted);margin-top:1px;}
 .selected-soldier-label{background:var(--sand-pale);border-radius:10px;padding:10px 14px;font-weight:700;color:var(--olive-dark);margin-bottom:16px;text-align:center;font-size:15px;}
+.edit-banner{background:#e8f0fe;border:1.5px solid #a8c0f8;border-radius:10px;padding:10px 14px;text-align:center;font-size:13px;font-weight:700;color:#1a56db;margin-bottom:14px;}
 </style>
 </head>
 <body>
@@ -294,6 +296,30 @@ textarea.form-control{resize:vertical;min-height:80px;}
   </div>
 </div>
 
+<!-- EDIT MODAL -->
+
+<div class="modal-overlay" id="editModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">&#9998; עריכת בקשה</div>
+    <div class="edit-banner" id="editBanner"></div>
+    <div class="form-row">
+      <div class="form-group"><label>תאריך יציאה</label><input type="date" class="form-control" id="editDateOut"></div>
+      <div class="form-group"><label>תאריך חזרה</label><input type="date" class="form-control" id="editDateIn"></div>
+    </div>
+    <div class="form-group">
+      <label>העדפת שיירה</label>
+      <div class="convoy-row">
+        <button type="button" class="convoy-btn" id="editConvoyNoon" onclick="setConvoy('edit','noon')"><span class="convoy-icon">&#127774;</span><span class="convoy-label">שיירת צהריים</span></button>
+        <button type="button" class="convoy-btn" id="editConvoyEvening" onclick="setConvoy('edit','evening')"><span class="convoy-icon">&#127769;</span><span class="convoy-label">שיירת ערב</span></button>
+      </div>
+    </div>
+    <div class="form-group"><label>סיבת הבקשה</label><textarea class="form-control" id="editReason" placeholder="פרטו את הסיבה..."></textarea></div>
+    <button class="btn-submit" onclick="saveEdit()">שמור שינויים</button>
+    <button class="btn-close-modal" onclick="closeModal('editModal')">ביטול</button>
+  </div>
+</div>
+
 <!-- PICK SOLDIER MODAL -->
 
 <div class="modal-overlay" id="pickSoldierModal">
@@ -380,9 +406,10 @@ var currentFilter = 'all';
 var allRequests = {};
 var allSoldiers = {};
 var prevPendingCount = 0;
-var convoys = {soldier:null,pick:null};
+var convoys = {soldier:null,pick:null,edit:null};
 var pickTarget = null;
 var pendingDeleteId = null;
+var editingReqId = null;
 var calYear, calMonth;
 (function(){var n=new Date();calYear=n.getFullYear();calMonth=n.getMonth();})();
 
@@ -456,14 +483,12 @@ window.logout=function(){
 
 window.setConvoy=function(scope,type){
   convoys[scope]=type;
-  if(scope==='soldier'){
-    document.getElementById('cNoon').classList.toggle('selected',type==='noon');
-    document.getElementById('cEvening').classList.toggle('selected',type==='evening');
-  }else{
-    document.getElementById('pNoon').classList.toggle('selected',type==='noon');
-    document.getElementById('pEvening').classList.toggle('selected',type==='evening');
-  }
+  var ids={soldier:['cNoon','cEvening'],pick:['pNoon','pEvening'],edit:['editConvoyNoon','editConvoyEvening']};
+  var pair=ids[scope];
+  document.getElementById(pair[0]).classList.toggle('selected',type==='noon');
+  document.getElementById(pair[1]).classList.toggle('selected',type==='evening');
 };
+
 window.toggleForm=function(formId,iconId){
   var form=document.getElementById(formId);
   var icon=document.getElementById(iconId);
@@ -506,6 +531,36 @@ window.submitReq=function(scope){
     closeModal('pickSoldierModal');
     showToast('הבקשה נוספה ואושרה עבור '+soldierName);
   }
+};
+
+// EDIT
+window.openEditModal=function(id){
+  var r=allRequests[id];if(!r)return;
+  editingReqId=id;
+  convoys.edit=null;
+  document.getElementById('editDateOut').value=r.dateOut||'';
+  document.getElementById('editDateIn').value=r.dateIn||'';
+  document.getElementById('editReason').value=r.reason||'';
+  document.getElementById('editConvoyNoon').classList.remove('selected');
+  document.getElementById('editConvoyEvening').classList.remove('selected');
+  if(r.convoy&&r.convoy.indexOf('צהריים')>-1){convoys.edit='noon';document.getElementById('editConvoyNoon').classList.add('selected');}
+  else if(r.convoy&&r.convoy.indexOf('ערב')>-1){convoys.edit='evening';document.getElementById('editConvoyEvening').classList.add('selected');}
+  document.getElementById('editBanner').textContent='עורך בקשה של: '+r.soldierName;
+  document.getElementById('editModal').classList.add('active');
+};
+
+window.saveEdit=function(){
+  if(!editingReqId)return;
+  var dateOut=document.getElementById('editDateOut').value;
+  var dateIn=document.getElementById('editDateIn').value;
+  var reason=document.getElementById('editReason').value.trim();
+  if(!dateOut||!dateIn||!reason){showToast('נא מלא את כל השדות');return;}
+  if(dateIn<dateOut){showToast('תאריך חזרה חייב להיות אחרי תאריך יציאה');return;}
+  var cLabel=convoys.edit==='noon'?'שיירת צהריים':convoys.edit==='evening'?'שיירת ערב':'לא צוין';
+  db.ref('requests/'+editingReqId).update({dateOut:dateOut,dateIn:dateIn,reason:reason,convoy:cLabel});
+  closeModal('editModal');
+  showToast('הבקשה עודכנה בהצלחה!');
+  refreshModal();
 };
 
 function renderMyReqs(){
@@ -620,16 +675,25 @@ window.setFilter=function(f){
   renderAllReqs();
 };
 
+function canEdit(r){
+  if(!currentUser)return false;
+  if(currentUser.type==='admin')return true;
+  return r.soldierId===currentUser.id;
+}
+
 function buildCard(r,isAdmin){
   var labels={pending:'ממתין לאישור',approved:'אושר',rejected:'נדחה'};
   var soldierHtml=isAdmin?'<div class="req-name">'+r.soldierName+'</div>':'';
   var convoyHtml=r.convoy?'<div class="req-convoy">&#128141; '+r.convoy+'</div>':'';
   var actionsHtml='';
+  var btns='';
   if(isAdmin){
-    var btns='';
     if(r.status==='pending'){btns+='<button class="btn-approve" onclick="approveReq(\''+r.id+'\')">אשר</button><button class="btn-reject" onclick="rejectReq(\''+r.id+'\')">דחה</button>';}
+    btns+='<button class="btn-edit" onclick="openEditModal(\''+r.id+'\')">&#9998; ערוך</button>';
     btns+='<button class="btn-delete" onclick="deleteReq(\''+r.id+'\')">מחק</button>';
     actionsHtml='<div class="req-actions">'+btns+'</div>';
+  } else if(canEdit(r)){
+    actionsHtml='<div class="req-actions"><button class="btn-edit" style="flex:none;padding:7px 16px" onclick="openEditModal(\''+r.id+'\')">&#9998; ערוך</button></div>';
   }
   return '<div class="req-card '+r.status+'"><div class="req-header">'+soldierHtml+'<span class="badge badge-'+r.status+'">'+labels[r.status]+'</span></div><div class="req-dates"><span>יציאה: <strong>'+fmtDate(r.dateOut)+'</strong></span><span>חזרה: <strong>'+fmtDate(r.dateIn)+'</strong></span></div><div class="req-reason">'+r.reason+'</div>'+convoyHtml+actionsHtml+'</div>';
 }
@@ -689,9 +753,22 @@ function refreshModal(){
   if(sid)openSoldierModal(sid);
 }
 window.closeModal=function(id){document.getElementById(id).classList.remove('active');};
-['soldierModal','dayModal','pickSoldierModal'].forEach(function(id){
+['soldierModal','dayModal','pickSoldierModal','editModal'].forEach(function(id){
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeModal(id);});
 });
+
+function copyAndOpen(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){showToast('הועתק! פתח וואטסאפ והדבק');setTimeout(function(){window.open('https://wa.me/','_blank');},1500);}).catch(function(){fallbackCopy(text);});
+  }else{fallbackCopy(text);}
+}
+function fallbackCopy(text){
+  var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand('copy');showToast('הועתק! פתח וואטסאפ והדבק');setTimeout(function(){window.open('https://wa.me/','_blank');},1500);}
+  catch(e){showToast('לא הצליח להעתיק');}
+  document.body.removeChild(ta);
+}
 
 window.exportWeekly=function(){
   var today=new Date();
@@ -738,22 +815,6 @@ window.exportRequests=function(){
   });
   copyAndOpen(lines.join('\n'));
 };
-
-function copyAndOpen(text){
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(function(){
-      showToast('הועתק! פתח וואטסאפ והדבק');
-      setTimeout(function(){window.open('https://wa.me/','_blank');},1500);
-    }).catch(function(){fallbackCopy(text);});
-  }else{fallbackCopy(text);}
-}
-function fallbackCopy(text){
-  var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
-  document.body.appendChild(ta);ta.focus();ta.select();
-  try{document.execCommand('copy');showToast('הועתק! פתח וואטסאפ והדבק');setTimeout(function(){window.open('https://wa.me/','_blank');},1500);}
-  catch(e){showToast('לא הצליח להעתיק');}
-  document.body.removeChild(ta);
-}
 </script>
 
 </body>
