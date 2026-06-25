@@ -270,11 +270,21 @@ textarea.form-control{resize:vertical;min-height:80px;}
     <button class="new-req-toggle" style="background:var(--olive-light)" onclick="openPickSoldierModal()">+ הוספת בקשה לחייל</button>
     <button class="btn-export" onclick="exportWeekly()">&#128228; ייצוא לוז שבועי לוואטסאפ</button>
     <button class="btn-export" style="background:var(--blue)" onclick="exportRequests()">&#128203; יצוא רשימת בקשות יציאה</button>
+    <button class="new-req-toggle" style="background:var(--blue)" onclick="toggleForm('adminEquipmentForm','aEqFormIcon')">
+      <span id="aEqFormIcon">+</span> דוח מצב ציוד אישי (שלי)
+    </button>
+    <div class="card" id="adminEquipmentForm" style="display:none">
+      <div class="card-title">&#128230; דוח ציוד שלי</div>
+      <div id="aEqStatusNote" class="topbar-subtitle" style="color:var(--text-muted);margin-bottom:12px"></div>
+      <div id="adminEquipmentItemsList"></div>
+      <button class="btn-submit" onclick="submitEquipment('admin')">שמור דוח ציוד</button>
+    </div>
     <div class="card">
       <div class="card-title">&#128230; מצב ציוד הצוות</div>
       <div id="equipmentSummary"></div>
     </div>
     <button class="btn-export" style="background:var(--red)" onclick="exportEquipmentReport()">&#128230; ייצוא דוח חוסרי ציוד לוואטסאפ</button>
+    <button class="btn-export" style="background:var(--olive-dark)" onclick="openEquipmentTable()">&#128202; טבלת ציוד מלאה</button>
     <div class="card">
       <div class="cal-nav">
         <button class="cal-nav-btn" onclick="calPrev()">&#8249;</button>
@@ -377,6 +387,18 @@ textarea.form-control{resize:vertical;min-height:80px;}
   </div>
 </div>
 
+<!-- EQUIPMENT TABLE MODAL -->
+<div class="modal-overlay" id="equipmentTableModal">
+  <div class="modal-sheet" style="max-width:96vw">
+    <div class="modal-handle"></div>
+    <div class="modal-title">&#128202; טבלת ציוד מלאה</div>
+    <div style="overflow-x:auto;max-width:100%">
+      <table id="equipmentTable" style="border-collapse:collapse;font-size:11px"></table>
+    </div>
+    <button class="btn-close-modal" onclick="closeModal('equipmentTableModal')">סגירה</button>
+  </div>
+</div>
+
 <!-- EQUIPMENT MODAL -->
 <div class="modal-overlay" id="equipmentModal">
   <div class="modal-sheet">
@@ -455,6 +477,7 @@ var currentFilter = 'all';
 var allRequests = {};
 var allSoldiers = {};
 var allEquipment = {};
+var eqLoaded = false;
 var prevPendingCount = 0;
 var convoys = {soldier:null,pick:null,edit:null};
 var pickTarget = null;
@@ -504,8 +527,10 @@ db.ref('requests').on('value',function(snap){
   if(currentUser&&currentUser.type==='soldier')renderMyReqs();
 });
 db.ref('equipment').on('value',function(snap){
+  var firstLoad=!eqLoaded;eqLoaded=true;
   allEquipment=snap.val()||{};
-  if(currentUser&&currentUser.type==='admin')renderEquipmentSummary();
+  if(currentUser&&currentUser.type==='admin'){renderEquipmentSummary();if(firstLoad)renderEquipmentForm('admin');}
+  if(currentUser&&currentUser.type==='soldier'&&firstLoad)renderEquipmentForm('soldier');
 });
 setTimeout(function(){var ov=document.getElementById('loadingOverlay');if(ov&&!ov.classList.contains('hidden')){ov.classList.add('hidden');showScreen('loginScreen');showToast('בעיית חיבור - נסה לרענן');}},8000);
 
@@ -518,7 +543,7 @@ window.login=function(){
   if(name===ADMIN_NAME){
     if(pass!==ADMIN_PASS){err.textContent='סיסמה שגויה';return;}
     currentUser={type:'admin',name:ADMIN_NAME,id:'admin'};
-    prevPendingCount=-1;showScreen('adminScreen');renderAdmin();return;
+    prevPendingCount=-1;showScreen('adminScreen');renderAdmin();renderEquipmentForm('admin');return;
   }
   var foundId=null;
   for(var sid in allSoldiers){if(allSoldiers[sid].name===name){foundId=sid;break;}}
@@ -527,7 +552,7 @@ window.login=function(){
   showScreen('soldierScreen');
   document.getElementById('soldierTopName').textContent=name;
   renderMyReqs();
-  renderEquipmentForm();
+  renderEquipmentForm('soldier');
 };
 window.logout=function(){
   currentUser=null;prevPendingCount=0;
@@ -618,27 +643,42 @@ function renderMyReqs(){
   el.innerHTML=myReqs.length===0?'<div class="empty-state"><div class="empty-icon">&#128205;</div>אין בקשות עדיין</div>':myReqs.map(function(r){return buildCard(r,false);}).join('');
 }
 
-function renderEquipmentForm(){
-  var el=document.getElementById('equipmentItemsList');if(!el)return;
-  var mine=allEquipment[currentUser.id]||{};
+function getEquipmentOwnerId(){
+  if(currentUser.type==='soldier')return currentUser.id;
+  var existing=Object.values(allSoldiers).find(function(s){return s.name===currentUser.name;});
+  if(existing)return existing.id;
+  var nr=db.ref('soldiers').push();
+  nr.set({id:nr.key,name:currentUser.name});
+  return nr.key;
+}
+function eqFieldId(scope,id){return (scope==='admin'?'aeq_':'eq_')+id;}
+function renderEquipmentForm(scope){
+  scope=scope||'soldier';
+  var listId=scope==='admin'?'adminEquipmentItemsList':'equipmentItemsList';
+  var noteId=scope==='admin'?'aEqStatusNote':'eqStatusNote';
+  var el=document.getElementById(listId);if(!el)return;
+  var ownerId=getEquipmentOwnerId();
+  var mine=allEquipment[ownerId]||{};
   el.innerHTML=EQUIPMENT_ITEMS.map(function(item){
     var current=mine[item.id]||'';
     var opts='<option value="">בחר...</option>'+item.options.map(function(o){return '<option value="'+o+'"'+(o===current?' selected':'')+'>'+o+'</option>';}).join('');
-    return '<div class="form-group"><label>'+item.id+'. '+item.name+'</label><select class="form-control" id="eq_'+item.id+'">'+opts+'</select></div>';
+    return '<div class="form-group"><label>'+item.id+'. '+item.name+'</label><select class="form-control" id="'+eqFieldId(scope,item.id)+'">'+opts+'</select></div>';
   }).join('');
-  var note=document.getElementById('eqStatusNote');
+  var note=document.getElementById(noteId);
   if(note)note.textContent=mine.updatedAt?'דווח לאחרונה: '+new Date(mine.updatedAt).toLocaleString('he-IL'):'עדיין לא דיווחת על מצב הציוד';
 }
-window.submitEquipment=function(){
+window.submitEquipment=function(scope){
+  scope=scope||'soldier';
+  var ownerId=getEquipmentOwnerId();
   var data={};var missing=false;
   EQUIPMENT_ITEMS.forEach(function(item){
-    var val=document.getElementById('eq_'+item.id).value;
+    var val=document.getElementById(eqFieldId(scope,item.id)).value;
     if(!val)missing=true;
     data[item.id]=val;
   });
   if(missing){showToast('נא למלא את כל הפריטים');return;}
   data.updatedAt=new Date().toISOString();
-  db.ref('equipment/'+currentUser.id).set(data);
+  db.ref('equipment/'+ownerId).set(data);
   showToast('דוח הציוד נשמר בהצלחה!');
 };
 
@@ -777,6 +817,30 @@ window.exportEquipmentReport=function(){
   if(!anyProblem){showToast('כל הציוד תקין, אין חוסרים לדווח');return;}
   copyAndOpen(lines.join('\n'));
 };
+window.openEquipmentTable=function(){
+  var soldiersByName={};
+  Object.values(allSoldiers).forEach(function(s){soldiersByName[s.name]=s;});
+  var names=TEAM.slice();
+  Object.values(allSoldiers).forEach(function(s){if(names.indexOf(s.name)===-1)names.push(s.name);});
+  var thStyle='border:1px solid var(--border);padding:6px 8px;background:var(--olive);color:white;white-space:nowrap;position:sticky;top:0';
+  var nameThStyle=thStyle+';position:sticky;right:0;background:var(--olive-dark);z-index:2';
+  var html='<thead><tr><th style="'+nameThStyle+'">לוחם</th>'+EQUIPMENT_ITEMS.map(function(item){return '<th style="'+thStyle+'">'+item.id+'. '+item.name+'</th>';}).join('')+'</tr></thead><tbody>';
+  names.forEach(function(name){
+    var s=soldiersByName[name];var eq=s?allEquipment[s.id]:null;
+    html+='<tr><td style="border:1px solid var(--border);padding:5px 8px;font-weight:700;white-space:nowrap;position:sticky;right:0;background:var(--sand-pale)">'+name+'</td>';
+    EQUIPMENT_ITEMS.forEach(function(item){
+      var val=eq?(eq[item.id]||'-'):'-';
+      var isProblem=eq&&item.id>1&&PROBLEM_STATUSES.indexOf(val)>-1;
+      var color=!eq?'var(--text-muted)':isProblem?'var(--red)':'var(--text)';
+      var weight=isProblem?'700':'400';
+      html+='<td style="border:1px solid var(--border);padding:5px 8px;text-align:center;white-space:nowrap;color:'+color+';font-weight:'+weight+'">'+val+'</td>';
+    });
+    html+='</tr>';
+  });
+  html+='</tbody>';
+  document.getElementById('equipmentTable').innerHTML=html;
+  document.getElementById('equipmentTableModal').classList.add('active');
+};
 window.addSoldier=function(){
   var name=document.getElementById('newSoldierName').value.trim();
   if(!name)return;
@@ -869,7 +933,7 @@ function refreshModal(){
   if(sid)openSoldierModal(sid);
 }
 window.closeModal=function(id){document.getElementById(id).classList.remove('active');};
-['soldierModal','dayModal','pickSoldierModal','editModal','equipmentModal'].forEach(function(id){
+['soldierModal','dayModal','pickSoldierModal','editModal','equipmentModal','equipmentTableModal'].forEach(function(id){
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeModal(id);});
 });
 
