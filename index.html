@@ -233,6 +233,15 @@ textarea.form-control{resize:vertical;min-height:80px;}
       <div class="card-title">&#128203; הבקשות שלי</div>
       <div id="myRequestsList"><div class="empty-state"><div class="empty-icon">&#128205;</div>אין בקשות עדיין</div></div>
     </div>
+    <button class="new-req-toggle" style="background:var(--blue)" onclick="toggleForm('equipmentForm','eqFormIcon')">
+      <span id="eqFormIcon">+</span> דוח מצב ציוד אישי
+    </button>
+    <div class="card" id="equipmentForm" style="display:none">
+      <div class="card-title">&#128230; דוח ציוד</div>
+      <div id="eqStatusNote" class="topbar-subtitle" style="color:var(--text-muted);margin-bottom:12px"></div>
+      <div id="equipmentItemsList"></div>
+      <button class="btn-submit" onclick="submitEquipment()">שמור דוח ציוד</button>
+    </div>
   </div>
 </div>
 
@@ -261,6 +270,11 @@ textarea.form-control{resize:vertical;min-height:80px;}
     <button class="new-req-toggle" style="background:var(--olive-light)" onclick="openPickSoldierModal()">+ הוספת בקשה לחייל</button>
     <button class="btn-export" onclick="exportWeekly()">&#128228; ייצוא לוז שבועי לוואטסאפ</button>
     <button class="btn-export" style="background:var(--blue)" onclick="exportRequests()">&#128203; יצוא רשימת בקשות יציאה</button>
+    <div class="card">
+      <div class="card-title">&#128230; מצב ציוד הצוות</div>
+      <div id="equipmentSummary"></div>
+    </div>
+    <button class="btn-export" style="background:var(--red)" onclick="exportEquipmentReport()">&#128230; ייצוא דוח חוסרי ציוד לוואטסאפ</button>
     <div class="card">
       <div class="cal-nav">
         <button class="cal-nav-btn" onclick="calPrev()">&#8249;</button>
@@ -363,6 +377,16 @@ textarea.form-control{resize:vertical;min-height:80px;}
   </div>
 </div>
 
+<!-- EQUIPMENT MODAL -->
+<div class="modal-overlay" id="equipmentModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="eqModalSoldierName"></div>
+    <div id="eqModalContent"></div>
+    <button class="btn-close-modal" onclick="closeModal('equipmentModal')">סגירה</button>
+  </div>
+</div>
+
 <!-- DAY MODAL -->
 <div class="modal-overlay" id="dayModal">
   <div class="modal-sheet">
@@ -396,10 +420,41 @@ var HOME_PERIODS = [
   {from:'2026-06-29',to:'2026-07-01'}
 ];
 
+var STATUS_OPTIONS = ['אישי','חתום ויש לי','חתום וחסר לי','לא חתום ואין','בלאי'];
+var PROBLEM_STATUSES = ['חתום וחסר לי','לא חתום ואין','בלאי'];
+var EQUIPMENT_ITEMS = [
+  {id:1,name:'סוג ווסט',options:['לוחם','נגב','חובש','מאג']},
+  {id:2,name:'ווסט',options:STATUS_OPTIONS},
+  {id:3,name:'שכפ"ץ',options:STATUS_OPTIONS},
+  {id:4,name:'מגן יהונתן',options:STATUS_OPTIONS},
+  {id:5,name:'2 לוחות קדמיים',options:STATUS_OPTIONS},
+  {id:6,name:'קסדה',options:STATUS_OPTIONS},
+  {id:7,name:'מצנפת',options:STATUS_OPTIONS},
+  {id:8,name:'2 ברכיות',options:STATUS_OPTIONS},
+  {id:9,name:'שלוקר',options:STATUS_OPTIONS},
+  {id:10,name:'שומר אחי',options:STATUS_OPTIONS},
+  {id:11,name:'רצועת נשק',options:STATUS_OPTIONS},
+  {id:12,name:'פנס קסדה',options:STATUS_OPTIONS},
+  {id:13,name:'ת"א',options:STATUS_OPTIONS},
+  {id:14,name:'ח"ע',options:STATUS_OPTIONS},
+  {id:15,name:'מחסניות',options:STATUS_OPTIONS},
+  {id:16,name:'חלפס',options:STATUS_OPTIONS},
+  {id:17,name:'תיק לואו',options:STATUS_OPTIONS},
+  {id:18,name:'זוג מדים',options:STATUS_OPTIONS},
+  {id:19,name:'חגורת ב',options:STATUS_OPTIONS},
+  {id:20,name:'כובע ב',options:STATUS_OPTIONS},
+  {id:21,name:'חרמונית',options:STATUS_OPTIONS},
+  {id:22,name:'יערית הסוואה',options:STATUS_OPTIONS},
+  {id:23,name:'את חפירה',options:STATUS_OPTIONS},
+  {id:24,name:'פלציב',options:STATUS_OPTIONS},
+  {id:25,name:'נקנש',options:STATUS_OPTIONS}
+];
+
 var currentUser = null;
 var currentFilter = 'all';
 var allRequests = {};
 var allSoldiers = {};
+var allEquipment = {};
 var prevPendingCount = 0;
 var convoys = {soldier:null,pick:null,edit:null};
 var pickTarget = null;
@@ -448,6 +503,10 @@ db.ref('requests').on('value',function(snap){
   }
   if(currentUser&&currentUser.type==='soldier')renderMyReqs();
 });
+db.ref('equipment').on('value',function(snap){
+  allEquipment=snap.val()||{};
+  if(currentUser&&currentUser.type==='admin')renderEquipmentSummary();
+});
 setTimeout(function(){var ov=document.getElementById('loadingOverlay');if(ov&&!ov.classList.contains('hidden')){ov.classList.add('hidden');showScreen('loginScreen');showToast('בעיית חיבור - נסה לרענן');}},8000);
 
 window.login=function(){
@@ -468,6 +527,7 @@ window.login=function(){
   showScreen('soldierScreen');
   document.getElementById('soldierTopName').textContent=name;
   renderMyReqs();
+  renderEquipmentForm();
 };
 window.logout=function(){
   currentUser=null;prevPendingCount=0;
@@ -558,7 +618,31 @@ function renderMyReqs(){
   el.innerHTML=myReqs.length===0?'<div class="empty-state"><div class="empty-icon">&#128205;</div>אין בקשות עדיין</div>':myReqs.map(function(r){return buildCard(r,false);}).join('');
 }
 
-function renderAdmin(){renderStats();updateLive();renderCal();renderAllReqs();renderSoldierList();updateDot();}
+function renderEquipmentForm(){
+  var el=document.getElementById('equipmentItemsList');if(!el)return;
+  var mine=allEquipment[currentUser.id]||{};
+  el.innerHTML=EQUIPMENT_ITEMS.map(function(item){
+    var current=mine[item.id]||'';
+    var opts='<option value="">בחר...</option>'+item.options.map(function(o){return '<option value="'+o+'"'+(o===current?' selected':'')+'>'+o+'</option>';}).join('');
+    return '<div class="form-group"><label>'+item.id+'. '+item.name+'</label><select class="form-control" id="eq_'+item.id+'">'+opts+'</select></div>';
+  }).join('');
+  var note=document.getElementById('eqStatusNote');
+  if(note)note.textContent=mine.updatedAt?'דווח לאחרונה: '+new Date(mine.updatedAt).toLocaleString('he-IL'):'עדיין לא דיווחת על מצב הציוד';
+}
+window.submitEquipment=function(){
+  var data={};var missing=false;
+  EQUIPMENT_ITEMS.forEach(function(item){
+    var val=document.getElementById('eq_'+item.id).value;
+    if(!val)missing=true;
+    data[item.id]=val;
+  });
+  if(missing){showToast('נא למלא את כל הפריטים');return;}
+  data.updatedAt=new Date().toISOString();
+  db.ref('equipment/'+currentUser.id).set(data);
+  showToast('דוח הציוד נשמר בהצלחה!');
+};
+
+function renderAdmin(){renderStats();updateLive();renderCal();renderAllReqs();renderSoldierList();renderEquipmentSummary();updateDot();}
 function renderStats(){
   var reqs=Object.values(allRequests);
   document.getElementById('statTotal').textContent=reqs.length;
@@ -641,6 +725,58 @@ function renderSoldierList(){
     return '<div class="soldier-row"><div class="soldier-avatar">'+s.name.charAt(0)+'</div><div class="soldier-info"><div class="soldier-name">'+s.name+'</div><div class="soldier-reqs">'+myReqs.length+' בקשות | '+pending+' ממתינות</div></div>'+badge+'</div>';
   }).join('');
 }
+function renderEquipmentSummary(){
+  var el=document.getElementById('equipmentSummary');if(!el)return;
+  var soldiersByName={};
+  Object.values(allSoldiers).forEach(function(s){soldiersByName[s.name]=s;});
+  var names=TEAM.slice();
+  Object.values(allSoldiers).forEach(function(s){if(names.indexOf(s.name)===-1)names.push(s.name);});
+  if(!names.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">&#128230;</div>אין לוחמים</div>';return;}
+  el.innerHTML=names.map(function(name){
+    var s=soldiersByName[name];
+    var eq=s?allEquipment[s.id]:null;
+    var badge;
+    if(!eq){badge='<span class="badge badge-rejected">לא דיווח</span>';}
+    else{
+      var problems=EQUIPMENT_ITEMS.filter(function(item){return item.id>1&&PROBLEM_STATUSES.indexOf(eq[item.id])>-1;}).length;
+      badge=problems===0?'<span class="badge badge-approved">תקין</span>':'<span class="pending-count" style="background:var(--red)">'+problems+' חוסרים</span>';
+    }
+    var clickable=s&&eq?' onclick="openEquipmentModal(\''+s.id+'\')" style="cursor:pointer"':'';
+    return '<div class="soldier-row"'+clickable+'><div class="soldier-avatar">'+name.charAt(0)+'</div><div class="soldier-info"><div class="soldier-name">'+name+'</div></div>'+badge+'</div>';
+  }).join('');
+}
+window.openEquipmentModal=function(soldierId){
+  var soldier=allSoldiers[soldierId];if(!soldier)return;
+  var eq=allEquipment[soldierId]||{};
+  document.getElementById('eqModalSoldierName').textContent=soldier.name;
+  document.getElementById('eqModalContent').innerHTML=EQUIPMENT_ITEMS.map(function(item){
+    var val=eq[item.id]||'-';
+    var isProblem=item.id>1&&PROBLEM_STATUSES.indexOf(val)>-1;
+    var style=isProblem?'color:var(--red);font-weight:700':'color:var(--text-muted)';
+    return '<div class="soldier-row"><div class="soldier-info"><div class="soldier-name" style="font-size:13px">'+item.id+'. '+item.name+'</div></div><div style="'+style+'">'+val+'</div></div>';
+  }).join('');
+  document.getElementById('equipmentModal').classList.add('active');
+};
+window.exportEquipmentReport=function(){
+  var soldiersByName={};
+  Object.values(allSoldiers).forEach(function(s){soldiersByName[s.name]=s;});
+  var names=TEAM.slice();
+  Object.values(allSoldiers).forEach(function(s){if(names.indexOf(s.name)===-1)names.push(s.name);});
+  var lines=['*דוח מצב ציוד - חוסרים*',''];
+  var anyProblem=false;
+  names.forEach(function(name){
+    var s=soldiersByName[name];var eq=s?allEquipment[s.id]:null;
+    if(!eq){lines.push('*'+name+'*: לא דיווח על מצב הציוד');lines.push('');anyProblem=true;return;}
+    var problems=EQUIPMENT_ITEMS.filter(function(item){return item.id>1&&PROBLEM_STATUSES.indexOf(eq[item.id])>-1;});
+    if(problems.length===0)return;
+    anyProblem=true;
+    lines.push('*'+name+'*:');
+    problems.forEach(function(item){lines.push('  - '+item.name+': '+eq[item.id]);});
+    lines.push('');
+  });
+  if(!anyProblem){showToast('כל הציוד תקין, אין חוסרים לדווח');return;}
+  copyAndOpen(lines.join('\n'));
+};
 window.addSoldier=function(){
   var name=document.getElementById('newSoldierName').value.trim();
   if(!name)return;
@@ -733,7 +869,7 @@ function refreshModal(){
   if(sid)openSoldierModal(sid);
 }
 window.closeModal=function(id){document.getElementById(id).classList.remove('active');};
-['soldierModal','dayModal','pickSoldierModal','editModal'].forEach(function(id){
+['soldierModal','dayModal','pickSoldierModal','editModal','equipmentModal'].forEach(function(id){
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)closeModal(id);});
 });
 
