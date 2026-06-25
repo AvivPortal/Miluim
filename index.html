@@ -160,6 +160,11 @@ textarea.form-control{resize:vertical;min-height:80px;}
 .pick-sub{font-size:11px;color:var(--text-muted);margin-top:1px;}
 .selected-soldier-label{background:var(--sand-pale);border-radius:10px;padding:10px 14px;font-weight:700;color:var(--olive-dark);margin-bottom:16px;text-align:center;font-size:15px;}
 .edit-banner{background:#e8f0fe;border:1.5px solid #a8c0f8;border-radius:10px;padding:10px 14px;text-align:center;font-size:13px;font-weight:700;color:#1a56db;margin-bottom:14px;}
+@media print{
+  body *{visibility:hidden;}
+  #printEquipmentArea,#printEquipmentArea *{visibility:visible;}
+  #printEquipmentArea{display:block !important;position:absolute;top:0;right:0;width:100%;}
+}
 </style>
 </head>
 <body>
@@ -283,8 +288,9 @@ textarea.form-control{resize:vertical;min-height:80px;}
       <div class="card-title">&#128230; מצב ציוד הצוות</div>
       <div id="equipmentSummary"></div>
     </div>
-    <button class="btn-export" style="background:var(--red)" onclick="exportEquipmentReport()">&#128230; ייצוא דוח חוסרי ציוד לוואטסאפ</button>
+    <button class="btn-export" style="background:var(--red)" onclick="exportEquipmentReport()">&#128230; ייצוא דוח ציוד מלא לוואטסאפ</button>
     <button class="btn-export" style="background:var(--olive-dark)" onclick="openEquipmentTable()">&#128202; טבלת ציוד מלאה</button>
+    <button class="btn-export" style="background:var(--text-muted)" onclick="exportEquipmentPDF()">&#128196; ייצוא דוח ציוד ל-PDF</button>
     <div class="card">
       <div class="cal-nav">
         <button class="cal-nav-btn" onclick="calPrev()">&#8249;</button>
@@ -386,6 +392,8 @@ textarea.form-control{resize:vertical;min-height:80px;}
     <button class="btn-close-modal" onclick="closeModal('soldierModal')">סגירה</button>
   </div>
 </div>
+
+<div id="printEquipmentArea" style="display:none"></div>
 
 <!-- EQUIPMENT TABLE MODAL -->
 <div class="modal-overlay" id="equipmentTableModal">
@@ -797,37 +805,37 @@ window.openEquipmentModal=function(soldierId){
   }).join('');
   document.getElementById('equipmentModal').classList.add('active');
 };
-window.exportEquipmentReport=function(){
+function getEquipmentRoster(){
   var soldiersByName={};
   Object.values(allSoldiers).forEach(function(s){soldiersByName[s.name]=s;});
   var names=TEAM.slice();
   Object.values(allSoldiers).forEach(function(s){if(names.indexOf(s.name)===-1)names.push(s.name);});
-  var lines=['*דוח מצב ציוד - חוסרים*',''];
-  var anyProblem=false;
-  names.forEach(function(name){
-    var s=soldiersByName[name];var eq=s?allEquipment[s.id]:null;
-    if(!eq){lines.push('*'+name+'*: לא דיווח על מצב הציוד');lines.push('');anyProblem=true;return;}
-    var problems=EQUIPMENT_ITEMS.filter(function(item){return item.id>1&&PROBLEM_STATUSES.indexOf(eq[item.id])>-1;});
-    if(problems.length===0)return;
-    anyProblem=true;
+  return {names:names,soldiersByName:soldiersByName};
+}
+window.exportEquipmentReport=function(){
+  var roster=getEquipmentRoster();
+  var lines=['*דוח מצב ציוד - מלא*',''];
+  roster.names.forEach(function(name){
+    var s=roster.soldiersByName[name];var eq=s?allEquipment[s.id]:null;
     lines.push('*'+name+'*:');
-    problems.forEach(function(item){lines.push('  - '+item.name+': '+eq[item.id]);});
+    if(!eq){lines.push('  לא דיווח על מצב הציוד');lines.push('');return;}
+    EQUIPMENT_ITEMS.forEach(function(item){
+      var val=eq[item.id]||'-';
+      var isProblem=item.id>1&&PROBLEM_STATUSES.indexOf(val)>-1;
+      lines.push('  '+item.name+': '+val+(isProblem?' ⚠️':''));
+    });
     lines.push('');
   });
-  if(!anyProblem){showToast('כל הציוד תקין, אין חוסרים לדווח');return;}
   copyAndOpen(lines.join('\n'));
 };
-window.openEquipmentTable=function(){
-  var soldiersByName={};
-  Object.values(allSoldiers).forEach(function(s){soldiersByName[s.name]=s;});
-  var names=TEAM.slice();
-  Object.values(allSoldiers).forEach(function(s){if(names.indexOf(s.name)===-1)names.push(s.name);});
-  var thStyle='border:1px solid var(--border);padding:6px 8px;background:var(--olive);color:white;white-space:nowrap;position:sticky;top:0';
-  var nameThStyle=thStyle+';position:sticky;right:0;background:var(--olive-dark);z-index:2';
+function buildEquipmentTableHTML(sticky){
+  var roster=getEquipmentRoster();
+  var thStyle='border:1px solid var(--border);padding:6px 8px;background:var(--olive);color:white;white-space:nowrap'+(sticky?';position:sticky;top:0':'');
+  var nameThStyle=thStyle+(sticky?';position:sticky;right:0':'')+';background:var(--olive-dark);z-index:2';
   var html='<thead><tr><th style="'+nameThStyle+'">לוחם</th>'+EQUIPMENT_ITEMS.map(function(item){return '<th style="'+thStyle+'">'+item.id+'. '+item.name+'</th>';}).join('')+'</tr></thead><tbody>';
-  names.forEach(function(name){
-    var s=soldiersByName[name];var eq=s?allEquipment[s.id]:null;
-    html+='<tr><td style="border:1px solid var(--border);padding:5px 8px;font-weight:700;white-space:nowrap;position:sticky;right:0;background:var(--sand-pale)">'+name+'</td>';
+  roster.names.forEach(function(name){
+    var s=roster.soldiersByName[name];var eq=s?allEquipment[s.id]:null;
+    html+='<tr><td style="border:1px solid var(--border);padding:5px 8px;font-weight:700;white-space:nowrap'+(sticky?';position:sticky;right:0':'')+';background:var(--sand-pale)">'+name+'</td>';
     EQUIPMENT_ITEMS.forEach(function(item){
       var val=eq?(eq[item.id]||'-'):'-';
       var isProblem=eq&&item.id>1&&PROBLEM_STATUSES.indexOf(val)>-1;
@@ -838,8 +846,16 @@ window.openEquipmentTable=function(){
     html+='</tr>';
   });
   html+='</tbody>';
-  document.getElementById('equipmentTable').innerHTML=html;
+  return html;
+}
+window.openEquipmentTable=function(){
+  document.getElementById('equipmentTable').innerHTML=buildEquipmentTableHTML(true);
   document.getElementById('equipmentTableModal').classList.add('active');
+};
+window.exportEquipmentPDF=function(){
+  var area=document.getElementById('printEquipmentArea');
+  area.innerHTML='<h2 style="margin-bottom:12px">דוח מצב ציוד - '+new Date().toLocaleDateString('he-IL')+'</h2><table style="border-collapse:collapse;font-size:10px;width:100%">'+buildEquipmentTableHTML(false)+'</table>';
+  window.print();
 };
 window.addSoldier=function(){
   var name=document.getElementById('newSoldierName').value.trim();
