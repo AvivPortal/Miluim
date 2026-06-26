@@ -161,6 +161,7 @@ textarea.form-control{resize:vertical;min-height:80px;}
 .selected-soldier-label{background:var(--sand-pale);border-radius:10px;padding:10px 14px;font-weight:700;color:var(--olive-dark);margin-bottom:16px;text-align:center;font-size:15px;}
 .edit-banner{background:#e8f0fe;border:1.5px solid #a8c0f8;border-radius:10px;padding:10px 14px;text-align:center;font-size:13px;font-weight:700;color:#1a56db;margin-bottom:14px;}
 @media print{
+  @page{size:landscape;}
   body *{visibility:hidden;}
   #printEquipmentArea,#printEquipmentArea *{visibility:visible;}
   #printEquipmentArea{display:block !important;position:absolute;top:0;right:0;width:100%;}
@@ -828,15 +829,16 @@ window.exportEquipmentReport=function(){
   });
   copyAndOpen(lines.join('\n'));
 };
-function buildEquipmentTableHTML(sticky){
+function buildEquipmentTableHTML(sticky,items){
+  items=items||EQUIPMENT_ITEMS;
   var roster=getEquipmentRoster();
   var thStyle='border:1px solid var(--border);padding:6px 8px;background:var(--olive);color:white;white-space:nowrap'+(sticky?';position:sticky;top:0':'');
   var nameThStyle=thStyle+(sticky?';position:sticky;right:0':'')+';background:var(--olive-dark);z-index:2';
-  var html='<thead><tr><th style="'+nameThStyle+'">לוחם</th>'+EQUIPMENT_ITEMS.map(function(item){return '<th style="'+thStyle+'">'+item.id+'. '+item.name+'</th>';}).join('')+'</tr></thead><tbody>';
+  var html='<thead><tr><th style="'+nameThStyle+'">לוחם</th>'+items.map(function(item){return '<th style="'+thStyle+'">'+item.id+'. '+item.name+'</th>';}).join('')+'</tr></thead><tbody>';
   roster.names.forEach(function(name){
     var s=roster.soldiersByName[name];var eq=s?allEquipment[s.id]:null;
     html+='<tr><td style="border:1px solid var(--border);padding:5px 8px;font-weight:700;white-space:nowrap'+(sticky?';position:sticky;right:0':'')+';background:var(--sand-pale)">'+name+'</td>';
-    EQUIPMENT_ITEMS.forEach(function(item){
+    items.forEach(function(item){
       var val=eq?(eq[item.id]||'-'):'-';
       var isProblem=eq&&item.id>1&&PROBLEM_STATUSES.indexOf(val)>-1;
       var color=!eq?'var(--text-muted)':isProblem?'var(--red)':'var(--text)';
@@ -853,8 +855,15 @@ window.openEquipmentTable=function(){
   document.getElementById('equipmentTableModal').classList.add('active');
 };
 window.exportEquipmentPDF=function(){
+  var PAGE_CHUNK=9;
+  var chunks=[];
+  for(var i=0;i<EQUIPMENT_ITEMS.length;i+=PAGE_CHUNK)chunks.push(EQUIPMENT_ITEMS.slice(i,i+PAGE_CHUNK));
+  var dateStr=new Date().toLocaleDateString('he-IL');
   var area=document.getElementById('printEquipmentArea');
-  area.innerHTML='<h2 style="margin-bottom:12px">דוח מצב ציוד - '+new Date().toLocaleDateString('he-IL')+'</h2><table style="border-collapse:collapse;font-size:10px;width:100%">'+buildEquipmentTableHTML(false)+'</table>';
+  area.innerHTML=chunks.map(function(items,idx){
+    var breakStyle=idx<chunks.length-1?'page-break-after:always;':'';
+    return '<div style="'+breakStyle+'"><h2 style="margin-bottom:12px">דוח מצב ציוד - '+dateStr+' (עמוד '+(idx+1)+'/'+chunks.length+')</h2><table style="border-collapse:collapse;font-size:11px;width:100%">'+buildEquipmentTableHTML(false,items)+'</table></div>';
+  }).join('');
   window.print();
 };
 window.addSoldier=function(){
